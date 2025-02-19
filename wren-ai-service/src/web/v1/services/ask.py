@@ -93,8 +93,9 @@ class AskResultResponse(BaseModel):
     rephrased_question: Optional[str] = None
     intent_reasoning: Optional[str] = None
     sql_generation_reasoning: Optional[str] = None
-    type: Optional[Literal["MISLEADING_QUERY", "GENERAL", "TEXT_TO_SQL"]] = None
+    type: Optional[Literal["MISLEADING_QUERY", "GENERAL", "TEXT_TO_SQL", "TEXT_TO_TABLE"]] = None
     retrieved_tables: Optional[List[str]] = None
+    retrieved_tables_reason:Optional[List[Optional[str]]] = None
     response: Optional[List[AskResult]] = None
     error: Optional[AskError] = None
 
@@ -286,6 +287,50 @@ class AskService:
                             intent_reasoning=intent_reasoning,
                         )
                         results["metadata"]["type"] = "GENERAL"
+                        return results
+                    elif intent == "TEXT_TO_TABLE":
+                        self._ask_results[query_id] = AskResultResponse(
+                          status="searching",
+                          type="TEXT_TO_TABLE",
+                          rephrased_question=rephrased_question,
+                          intent_reasoning=intent_reasoning,
+                        )
+                        retrieval_result = await self._pipelines["retrieval"].run(
+                          query=user_query,
+                          history=ask_request.history,
+                          id=ask_request.project_id,
+                        )
+                        _retrieval_result = retrieval_result.get(
+                          "construct_retrieval_results", {}
+                        )
+                        documents = _retrieval_result.get("retrieval_results", [])
+                        table_names = [document.get("table_name") for document in documents]
+                        table_names_reason = [document.get("table_selection_reason") for document in documents]
+                        if not documents:
+                            logger.exception(f"ask pipeline - NO_RELEVANT_DATA: {user_query}")
+                            if not self._is_stopped(query_id, self._ask_results):
+                                self._ask_results[query_id] = AskResultResponse(
+                                  status="failed",
+                                  type="TEXT_TO_TABLE",
+                                  error=AskError(
+                                      code="NO_RELEVANT_DATA",
+                                      message="No relevant data",
+                                  ),
+                                  rephrased_question=rephrased_question,
+                                  intent_reasoning=intent_reasoning,
+                                )
+                            results["metadata"]["error_type"] = "NO_RELEVANT_DATA"
+                            results["metadata"]["type"] = "TEXT_TO_TABLE"
+                            return results
+                        self._ask_results[query_id] = AskResultResponse(
+                            status="finished",
+                            type="TEXT_TO_TABLE",
+                            rephrased_question=rephrased_question,
+                            intent_reasoning=intent_reasoning,
+                            retrieved_tables=table_names,
+                            retrieved_tables_reason=table_names_reason
+                        )
+                        results["metadata"]["type"] = "TEXT_TO_TABLE"
                         return results
                     else:
                         self._ask_results[query_id] = AskResultResponse(

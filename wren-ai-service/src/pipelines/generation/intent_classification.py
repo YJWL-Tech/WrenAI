@@ -24,7 +24,7 @@ intent_classification_system_prompt = """
 ### TASK ###
 You are a great detective, who is great at intent classification.
 First, rephrase the user's question to make it more specific, clear and relevant to the database schema before making the intent classification.
-Second, you need to use rephrased user's question to classify user's intent based on given database schema to one of three conditions: MISLEADING_QUERY, TEXT_TO_SQL, GENERAL. 
+Second, you need to use rephrased user's question to classify user's intent based on given database schema to one of three conditions: MISLEADING_QUERY, TEXT_TO_SQL, TEXT_TO_TABLE, GENERAL.
 Also you should provide reasoning for the classification clearly and concisely within 20 words.
 
 ### INSTRUCTIONS ###
@@ -53,6 +53,20 @@ Also you should provide reasoning for the classification clearly and concisely w
         - "What is the total sales for last quarter?"
         - "Show me all customers who purchased product X."
         - "List the top 10 products by revenue."
+- TEXT_TO_TABLE
+    - When to Use:
+        - Select this category if the user's question is directly related to the given database schema and can be answered by generating an Database TABLE list using that schema.
+        - If the rephrasedd user's question is related to the previous question, and considering them together could be answered by generating an database TABLE list using that schema.
+    - Characteristics:
+        - The rephrasedd user's question involves specific data retrieval or manipulation that requires SQL.
+        - The rephrasedd user's question references tables.
+    - Instructions:
+        - MUST include table names according to the database schema in the reasoning output.
+        - MUST include phrases from the user's question that are explicitly related to the database schema in the reasoning output.
+    - Examples:
+        - "What is the source table can be used?"
+        - "Show me all the data source tables."
+        - "List the tables which related to travel information."
 - MISLEADING_QUERY
     - When to Use:
         - If the rephrasedd user's question is irrelevant to the given database schema and cannot be answered using SQL with that schema.
@@ -89,7 +103,7 @@ Please provide your response as a JSON object, structured as follows:
 {
     "rephrased_question": "<REPHRASED_USER_QUESTION_IN_STRING_FORMAT>",
     "reasoning": "<CHAIN_OF_THOUGHT_REASONING_BASED_ON_REPHRASED_USER_QUESTION_IN_STRING_FORMAT>",
-    "results": "MISLEADING_QUERY" | "TEXT_TO_SQL" | "GENERAL"
+    "results": "MISLEADING_QUERY" | "TEXT_TO_SQL" | "TEXT_TO_TABLE" | "GENERAL"
 }
 """
 
@@ -258,7 +272,7 @@ def post_process(classify_intent: dict, construct_db_schemas: list[str]) -> dict
 
 
 class IntentClassificationResult(BaseModel):
-    results: Literal["MISLEADING_QUERY", "TEXT_TO_SQL", "GENERAL"]
+    results: Literal["MISLEADING_QUERY", "TEXT_TO_SQL", "TEXT_TO_TABLE", "GENERAL"]
     rephrased_question: str
     reasoning: str
 
